@@ -40,12 +40,11 @@ func ConfigureLogger() {
 	envlvl := os.Getenv("LOG_LEVEL")
 	if envlvl != "" {
 		lvl, err := logging.LogLevel(envlvl)
-		if err == nil {
-			log.Notice("Set logging level to %s.\n", lvl)
-			logging.SetLevel(lvl, "")
-		} else {
-			fmt.Errorf("%s", err)
+		if err != nil {
+			lvl = logging.INFO
 		}
+		log.Notice("Set logging level to %s.\n", lvl)
+		logging.SetLevel(lvl, "")
 	} else {
 		log.Notice("No log level defined in environment. Defaulting to INFO.\n")
 		logging.SetLevel(logging.INFO, "")

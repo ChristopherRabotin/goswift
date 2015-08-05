@@ -102,7 +102,6 @@ func TestSwift(t *testing.T) {
 			headers["Authorization"] = []string{"DecayingToken " + invalidToken}
 			for _, meth := range methods {
 				req := performRequest(e, meth, "/auth/token/test/", headers, nil)
-				log.Info("%s", req.Body.Bytes())
 				var resp ErrorResponse
 				json.Unmarshal(req.Body.Bytes(), &resp)
 
