@@ -96,9 +96,13 @@ func TestSwift(t *testing.T) {
 
 		Convey("Invalid Persishable Tokens fail on the test endpoints fails for all methods", func() {
 			headers := make(map[string][]string)
-			headers["Authorization"] = []string{"DecayingToken aaaaaaaaaa"}
+			invalidToken := "someinvalidtoken"
+			// Let's make sure we remove this from redis.
+			redisCnx.Del(tokenToRedisKey(invalidToken))
+			headers["Authorization"] = []string{"DecayingToken " + invalidToken}
 			for _, meth := range methods {
 				req := performRequest(e, meth, "/auth/token/test/", headers, nil)
+				log.Info("%s", req.Body.Bytes())
 				var resp ErrorResponse
 				json.Unmarshal(req.Body.Bytes(), &resp)
 

@@ -25,10 +25,11 @@ type PerishableTokenMgr struct {
 func (m PerishableTokenMgr) CheckHeader(auth *headerauth.AuthInfo, req *http.Request) (err *headerauth.AuthErr) {
 	auth.Secret = ""     // There is no secret key, just an access key.
 	auth.DataToSign = "" // There is no data to sign.
-	if ok, attempts := getTokenHits(auth.AccessKey, m.redisClient); !ok || attempts >= NONCE_LIMIT {
+	if ok, attempts := getTokenHits(auth.AccessKey, m.redisClient); !ok || (ok && attempts >= NONCE_LIMIT) {
 		// Note: if we've hit the max usage limit, we just return an error and wait for Redis to
 		// handle its expiration.
 		err = &headerauth.AuthErr{401, errors.New("invalid token")}
+		return
 	}
 	incrToken(auth.AccessKey, m.redisClient)
 	return

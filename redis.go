@@ -22,8 +22,8 @@ func redisClient() *redis.Client {
 }
 
 // tokenToRedisKey returns the formatted Redis key for the provided token.
-func tokenToRedisKey(nonce string) string {
-	return fmt.Sprint("goswift:perishabletoken:%s:", nonce)
+func tokenToRedisKey(token string) string {
+	return fmt.Sprintf("goswift:perishabletoken:%s", token)
 }
 
 // getToken returns whether the token exists and its value if so.
