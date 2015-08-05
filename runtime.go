@@ -1,8 +1,8 @@
-package settings
+package main
 
 import (
 	"fmt"
-	"log"
+	"github.com/op/go-logging"
 	"os"
 	"runtime"
 	"strconv"
@@ -28,5 +28,26 @@ func ConfigureRuntime() {
 		useNumCPUs = runtime.NumCPU()
 	}
 	runtime.GOMAXPROCS(useNumCPUs)
-	log.Printf("Running with %d CPUs.\n", useNumCPUs)
+	log.Info("Running with %d CPUs.\n", useNumCPUs)
+}
+
+// ConfigureLogger configures the default logger (named "gofetch").
+func ConfigureLogger() {
+	// From https://github.com/op/go-logging/blob/master/examples/example.go.
+	logFormat := logging.MustStringFormatter("%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level}%{color:reset} %{message}")
+	logging.SetBackend(logging.NewBackendFormatter(logging.NewLogBackend(os.Stderr, "", 0), logFormat))
+	// Let's grab the log level from the environment, or set it to INFO.
+	envlvl := os.Getenv("LOG_LEVEL")
+	if envlvl != "" {
+		lvl, err := logging.LogLevel(envlvl)
+		if err == nil {
+			log.Notice("Set logging level to %s.\n", lvl)
+			logging.SetLevel(lvl, "")
+		} else {
+			fmt.Errorf("%s", err)
+		}
+	} else {
+		log.Notice("No log level defined in environment. Defaulting to INFO.\n")
+		logging.SetLevel(logging.INFO, "")
+	}
 }

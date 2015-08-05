@@ -25,17 +25,23 @@ type PerishableTokenMgr struct {
 func (m PerishableTokenMgr) CheckHeader(auth *headerauth.AuthInfo, req *http.Request) (err *headerauth.AuthErr) {
 	auth.Secret = ""     // There is no secret key, just an access key.
 	auth.DataToSign = "" // There is no data to sign.
-	if ok, attempts := getTokenHits(auth.AccessKey, m.redisClient); !ok || attempts > NONCE_LIMIT {
+	if ok, attempts := getTokenHits(auth.AccessKey, m.redisClient); !ok || attempts >= NONCE_LIMIT {
 		// Note: if we've hit the max usage limit, we just return an error and wait for Redis to
 		// handle its expiration.
-		err = &headerauth.AuthErr{403, errors.New("invalid token")}
+		err = &headerauth.AuthErr{401, errors.New("invalid token")}
 	}
+	incrToken(auth.AccessKey, m.redisClient)
 	return
 }
 
 // Authorize sets the specified context key to the valid token (no additonals checks here, as per documentation recommendations).
 func (m PerishableTokenMgr) Authorize(auth *headerauth.AuthInfo) (val interface{}, err *headerauth.AuthErr) {
 	return auth.AccessKey, nil
+}
+
+// PreAbort sets the appropriate error JSON.
+func (m PerishableTokenMgr) PreAbort(c *gin.Context, auth *headerauth.AuthInfo, err *headerauth.AuthErr) {
+	c.JSON(err.Status, statusMsg[err.Status].JSON())
 }
 
 // tokenGET returns a JSON object which contains a new NONCE with its expiration time and the number of allowed usages.

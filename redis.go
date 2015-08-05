@@ -45,10 +45,16 @@ func getTokenHits(token string, client *redis.Client) (ok bool, valueInt int) {
 	return
 }
 
+// incrToken increments the usage number of that token.
+func incrToken(token string, client *redis.Client) {
+	if err := client.Incr(tokenToRedisKey(token)).Err(); err != redis.Nil && err != nil {
+		panic(fmt.Errorf("incrementing token %s failed %s", token, err))
+	}
+}
+
 // setToken creates a new nonce and sets its expiration date and returns the expiration time.
 func setToken(token string, dur time.Duration, client *redis.Client) {
-	err := client.Set(tokenToRedisKey(token), 0, dur).Err()
-	if err != redis.Nil && err != nil {
+	if err := client.Set(tokenToRedisKey(token), 0, dur).Err(); err != redis.Nil && err != nil {
 		panic(fmt.Errorf("setting token %s failed %s", token, err))
 	}
 }

@@ -13,7 +13,7 @@ const (
 	Status403
 )
 
-var json = [...]interface{}{ // This is in the same order as the DefaultStatus const.
+var jsonStatus = [...]interface{}{ // This is in the same order as the DefaultStatus const.
 	gin.H{"error": "service unavailable"},
 	gin.H{"error": "client error"},
 	gin.H{"error": "unauthorized"},
@@ -21,7 +21,9 @@ var json = [...]interface{}{ // This is in the same order as the DefaultStatus c
 	gin.H{"error": "not found"},
 }
 
+var statusMsg = map[int]DefaultStatus{503: Status503, 400: Status400, 401: Status401, 403: Status403}
+
 // JSON returns the default JSON error for the provided status.
 func (status DefaultStatus) JSON() interface{} {
-	return json[status-1]
+	return jsonStatus[status-1]
 }
