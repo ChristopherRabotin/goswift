@@ -4,12 +4,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// DefaultStatus is an Enum storing default JSON errors based on the status.
 type DefaultStatus int
 
 const (
+	// Status503 is for service unavailable.
 	Status503 DefaultStatus = 1 + iota
+	// Status400 is for a client error.
 	Status400
+	// Status401 is for an unauthorized access.
 	Status401
+	// Status403 is for a forbidden access (and auth'ing won't help).
 	Status403
 )
 

@@ -61,8 +61,8 @@ func TestSwift(t *testing.T) {
 			var tok TokenResponse
 			json.Unmarshal(req.Body.Bytes(), &tok)
 
-			So(tok.Limit, ShouldEqual, NONCE_LIMIT)
-			expirationValid := tok.Expires.Sub(time.Now()) < NONCE_TTL
+			So(tok.Limit, ShouldEqual, NonceLimit)
+			expirationValid := tok.Expires.Sub(time.Now()) < NonceTTL
 			So(expirationValid, ShouldEqual, true)
 
 			Convey("And can be used on the auth test endpoint for all methods until its limit", func() {
@@ -79,7 +79,7 @@ func TestSwift(t *testing.T) {
 				}
 
 				// Let's check that the token will perish after the limit is hit.
-				remaining := NONCE_LIMIT - tok.NumUsed
+				remaining := NonceLimit - tok.NumUsed
 				for i := 0; i < remaining; i++ {
 					So(performRequest(e, "GET", "/auth/token/test/", headers, nil).Code, ShouldEqual, 200)
 					tok.NumUsed++

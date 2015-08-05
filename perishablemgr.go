@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	NONCE_TTL   = time.Minute * 15
-	NONCE_LIMIT = 15
+	// NonceTTL is the time to live of a Nonce token.
+	NonceTTL = time.Minute * 15
+	// NonceLimit is the max number of times a token can be used.
+	NonceLimit = 15
 )
 
 // PerishableTokenMgr defines a header auth manager whose tokens are only valid for a short time.
@@ -25,7 +27,7 @@ type PerishableTokenMgr struct {
 func (m PerishableTokenMgr) CheckHeader(auth *headerauth.AuthInfo, req *http.Request) (err *headerauth.AuthErr) {
 	auth.Secret = ""     // There is no secret key, just an access key.
 	auth.DataToSign = "" // There is no data to sign.
-	if ok, attempts := getTokenHits(auth.AccessKey, m.redisClient); !ok || (ok && attempts >= NONCE_LIMIT) {
+	if ok, attempts := getTokenHits(auth.AccessKey, m.redisClient); !ok || (ok && attempts >= NonceLimit) {
 		// Note: if we've hit the max usage limit, we just return an error and wait for Redis to
 		// handle its expiration.
 		err = &headerauth.AuthErr{401, errors.New("invalid token")}
@@ -54,9 +56,9 @@ func tokenGET(c *gin.Context) {
 			if ok, _ := getTokenHits(token, redisCnx); !ok {
 				// We calculate the expire time prior to actually setting it so the client
 				// can switch to another Nonce before it actually expires.
-				expires := time.Now().Add(NONCE_TTL)
-				setToken(token, NONCE_TTL, redisCnx)
-				c.JSON(200, gin.H{"token": token, "expires": expires.Format(time.RFC3339), "limit": NONCE_LIMIT})
+				expires := time.Now().Add(NonceTTL)
+				setToken(token, NonceTTL, redisCnx)
+				c.JSON(200, gin.H{"token": token, "expires": expires.Format(time.RFC3339), "limit": NonceLimit})
 				failed = false
 				break
 			}

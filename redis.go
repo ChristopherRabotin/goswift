@@ -12,13 +12,13 @@ import (
 // redisClient returns a pointer to the Redis client.
 func redisClient() *redis.Client {
 	envvar := os.Getenv("REDIS_URL")
-	redisUrl, err := url.Parse(envvar)
+	redisURL, err := url.Parse(envvar)
 	if err != nil {
 		panic(fmt.Errorf("could not parse REDIS_URL `%s`", envvar))
 	}
-	pwd, _ := redisUrl.User.Password()
+	pwd, _ := redisURL.User.Password()
 
-	return redis.NewClient(&redis.Options{Addr: redisUrl.Host, Password: pwd, DB: 0})
+	return redis.NewClient(&redis.Options{Addr: redisURL.Host, Password: pwd, DB: 0})
 }
 
 // tokenToRedisKey returns the formatted Redis key for the provided token.
