@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Sparrho/goswift/settings"
 	. "github.com/smartystreets/goconvey/convey"
 	"io"
 	"net/http"
@@ -46,8 +47,8 @@ func TestSwift(t *testing.T) {
 			Error string
 		}
 
-		ConfigureLogger()
-		ConfigureRuntime()
+		settings.ConfigureLogger()
+		settings.ConfigureRuntime()
 		e := PourGin()
 		Convey("GET root redirects", func() {
 			req := performRequest(e, "GET", "/", nil, nil)

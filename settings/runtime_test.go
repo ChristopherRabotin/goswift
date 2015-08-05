@@ -1,4 +1,4 @@
-package main
+package settings
 
 import (
 	"fmt"
@@ -9,8 +9,7 @@ import (
 
 // TestRuntime tests stuff from runtime.go
 func TestRuntime(t *testing.T) {
-	testGoswift = true
-	Convey("The Runtime tests, ", t, func() {
+	Convey("The Runtime configuration tests, ", t, func() {
 		envvars := []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_STORAGE_BUCKET_NAME", "REDIS_URL"}
 		for i := range envvars {
 			envvar := envvars[i]

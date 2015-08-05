@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/ChristopherRabotin/gin-contrib-headerauth"
+	"github.com/Sparrho/goswift/settings"
 	"github.com/gin-gonic/gin"
 	"github.com/op/go-logging"
 )
@@ -15,18 +16,22 @@ var redisCnx = redisClient()
 // log is the main go-logging logger.
 var log = logging.MustGetLogger("goswift")
 
+// init is ran before the main, so we'll perform the environment verifications there.
+func init() {
+	settings.CheckEnvVars() // This will fail if there are env vars missing.
+	settings.ConfigureLogger()
+	settings.ConfigureRuntime()
+}
+
 // main starts all needed functions to start the server.
 func main() {
-	CheckEnvVars() // This will fail if there are env vars missing.
-	ConfigureLogger()
-	ConfigureRuntime()
 	PourGin()
 }
 
 // PourGin starts pouring the gin, i.e. sets up routes and starts listening.
 // This returns an engine specifically for testing purposes.
 func PourGin() *gin.Engine {
-	gin.SetMode(ServerMode())
+	gin.SetMode(settings.ServerMode())
 	engine := gin.Default()
 	engine.GET("/", IndexGet)
 	// Auth managers
@@ -49,7 +54,7 @@ func PourGin() *gin.Engine {
 	analytics.PUT("/record", SuccessJSON)
 	if !testGoswift {
 		// Starting the server.
-		engine.Run(ServerConfig())
+		engine.Run(settings.ServerConfig())
 		return nil
 	}
 	return engine
