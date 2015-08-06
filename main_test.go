@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Sparrho/goswift/auth"
 	"github.com/Sparrho/goswift/settings"
 	. "github.com/smartystreets/goconvey/convey"
 	"io"
@@ -61,8 +62,8 @@ func TestSwift(t *testing.T) {
 			var tok TokenResponse
 			json.Unmarshal(req.Body.Bytes(), &tok)
 
-			So(tok.Limit, ShouldEqual, NonceLimit)
-			expirationValid := tok.Expires.Sub(time.Now()) < NonceTTL
+			So(tok.Limit, ShouldEqual, auth.NonceLimit)
+			expirationValid := tok.Expires.Sub(time.Now()) < auth.NonceTTL
 			So(expirationValid, ShouldEqual, true)
 
 			Convey("And can be used on the auth test endpoint for all methods until its limit", func() {
@@ -79,7 +80,7 @@ func TestSwift(t *testing.T) {
 				}
 
 				// Let's check that the token will perish after the limit is hit.
-				remaining := NonceLimit - tok.NumUsed
+				remaining := auth.NonceLimit - tok.NumUsed
 				for i := 0; i < remaining; i++ {
 					So(performRequest(e, "GET", "/auth/token/test/", headers, nil).Code, ShouldEqual, 200)
 					tok.NumUsed++
@@ -99,7 +100,7 @@ func TestSwift(t *testing.T) {
 			headers := make(map[string][]string)
 			invalidToken := "someinvalidtoken"
 			// Let's make sure we remove this from redis.
-			redisCnx.Del(tokenToRedisKey(invalidToken))
+			auth.RedisCnx.Del(auth.TokenToRedisKey(invalidToken))
 			headers["Authorization"] = []string{"DecayingToken " + invalidToken}
 			for _, meth := range methods {
 				req := performRequest(e, meth, "/auth/token/test/", headers, nil)

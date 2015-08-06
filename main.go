@@ -3,6 +3,7 @@ package main
 
 import (
 	"github.com/ChristopherRabotin/gin-contrib-headerauth"
+	"github.com/Sparrho/goswift/auth"
 	"github.com/Sparrho/goswift/settings"
 	"github.com/gin-gonic/gin"
 	"github.com/op/go-logging"
@@ -10,9 +11,6 @@ import (
 
 // testGoswift must be true when testing to avoid starting the server.
 var testGoswift = false
-
-// Let's have one pemanent Redis connection.
-var redisCnx = redisClient()
 
 // log is the main go-logging logger.
 var log = logging.MustGetLogger("goswift")
@@ -36,13 +34,13 @@ func PourGin() *gin.Engine {
 	engine := gin.Default()
 	engine.GET("/", IndexGet)
 	// Auth managers
-	perishable := PerishableTokenMgr{redisCnx, headerauth.NewTokenManager("Authorization", "DecayingToken", "token")}
+	perishable := auth.NewPerishableTokenMgr("DecayingToken", "token")
 
 	// Auth group.
-	auth := engine.Group("/auth")
-	auth.GET("/token", tokenGET)
+	authG := engine.Group("/auth")
+	authG.GET("/token", auth.GetToken)
 	// Auth testing group for tokens. Works on *all* methods.
-	authTokenTest := auth.Group("/token/test")
+	authTokenTest := authG.Group("/token/test")
 	authTokenTest.Use(headerauth.HeaderAuth(perishable))
 	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH"}
 	for _, meth := range methods {

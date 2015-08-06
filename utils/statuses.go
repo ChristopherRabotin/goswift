@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"github.com/gin-gonic/gin"
@@ -26,7 +26,7 @@ var jsonStatus = [...]interface{}{ // This is in the same order as the DefaultSt
 	gin.H{"error": "not found"},
 }
 
-var statusMsg = map[int]DefaultStatus{503: Status503, 400: Status400, 401: Status401, 403: Status403}
+var StatusMsg = map[int]DefaultStatus{503: Status503, 400: Status400, 401: Status401, 403: Status403}
 
 // JSON returns the default JSON error for the provided status.
 func (status DefaultStatus) JSON() interface{} {

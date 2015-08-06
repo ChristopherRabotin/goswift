@@ -1,4 +1,4 @@
-package main
+package auth
 
 import (
 	"fmt"
@@ -10,7 +10,6 @@ import (
 
 // TestRedis tests all of features of the redis interface.
 func TestRedis(t *testing.T) {
-	testGoswift = true
 	Convey("The Redis interface tests, ", t, func() {
 		Convey("Without a REDIS_URL", func() {
 			curVal := os.Getenv("REDIS_URL")
@@ -23,11 +22,11 @@ func TestRedis(t *testing.T) {
 			token := "testing"
 			client := redisClient()
 			Convey("The expected token Redis key is correct", func() {
-				So(tokenToRedisKey(token), ShouldEqual, "goswift:perishabletoken:testing")
+				So(TokenToRedisKey(token), ShouldEqual, "goswift:perishabletoken:testing")
 			})
 
 			Convey("Updating or getting a non integer Redis key fails", func() {
-				if err := client.Set(tokenToRedisKey(token), "val", 0).Err(); err != redis.Nil && err != nil {
+				if err := client.Set(TokenToRedisKey(token), "val", 0).Err(); err != redis.Nil && err != nil {
 					panic(fmt.Errorf("setting token %s failed %s", token, err))
 				}
 				So(func() { incrToken(token, client) }, ShouldPanic)
