@@ -100,7 +100,7 @@ func TestSwift(t *testing.T) {
 			headers := make(map[string][]string)
 			invalidToken := "someinvalidtoken"
 			// Let's make sure we remove this from redis.
-			auth.RedisCnx.Del(auth.TokenToRedisKey(invalidToken))
+			auth.RedisCnx.Del(auth.PerishableRedisKey(invalidToken))
 			headers["Authorization"] = []string{"DecayingToken " + invalidToken}
 			for _, meth := range methods {
 				req := performRequest(e, meth, "/auth/token/test/", headers, nil)

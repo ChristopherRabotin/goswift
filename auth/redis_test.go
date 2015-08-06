@@ -22,19 +22,19 @@ func TestRedis(t *testing.T) {
 			token := "testing"
 			client := redisClient()
 			Convey("The expected token Redis key is correct", func() {
-				So(TokenToRedisKey(token), ShouldEqual, "goswift:perishabletoken:testing")
+				So(PerishableRedisKey(token), ShouldEqual, "goswift:perishabletoken:testing")
 			})
 
 			Convey("Updating or getting a non integer Redis key fails", func() {
-				if err := client.Set(TokenToRedisKey(token), "val", 0).Err(); err != redis.Nil && err != nil {
+				if err := client.Set(PerishableRedisKey(token), "val", 0).Err(); err != redis.Nil && err != nil {
 					panic(fmt.Errorf("setting token %s failed %s", token, err))
 				}
-				So(func() { incrToken(token, client) }, ShouldPanic)
-				So(func() { getTokenHits(token, client) }, ShouldPanic)
+				So(func() { incrToken(PerishableRedisKey(token), client) }, ShouldPanic)
+				So(func() { getTokenHits(PerishableRedisKey(token), client) }, ShouldPanic)
 			})
 
 			Convey("Getting the value for a non existing key fails", func() {
-				ok, _ := getTokenHits(token+"NotExist", client)
+				ok, _ := getTokenHits(PerishableRedisKey(token+"NotExist"), client)
 				So(ok, ShouldEqual, false)
 			})
 
