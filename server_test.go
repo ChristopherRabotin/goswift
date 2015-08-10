@@ -1,4 +1,4 @@
-package settings
+package goswift
 
 import (
 	"fmt"
@@ -17,9 +17,9 @@ func TestServer(t *testing.T) {
 				port string
 				expt string
 			}{
-				{"", "", fmt.Sprintf(":%s", DEFAULT_PORT)},
+				{"", "", fmt.Sprintf(":%s", DefaultPort)},
 				{"", "1025", ":1025"},
-				{"127.0.0.1", "", fmt.Sprintf("127.0.0.1:%s", DEFAULT_PORT)},
+				{"127.0.0.1", "", fmt.Sprintf("127.0.0.1:%s", DefaultPort)},
 				{"127.0.0.1", "1025", "127.0.0.1:1025"},
 			}
 			for _, conf := range serverConfs {
@@ -36,6 +36,7 @@ func TestServer(t *testing.T) {
 				curVal := os.Getenv(envvar)
 				os.Unsetenv(envvar)
 				So(func() { ServerMode() }, ShouldNotPanic)
+				So(func() { ServerConfig() }, ShouldNotPanic)
 				os.Setenv(envvar, curVal)
 			})
 		}

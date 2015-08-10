@@ -1,4 +1,4 @@
-package auth
+package goswift
 
 import (
 	"fmt"
@@ -24,19 +24,24 @@ func redisClient() *redis.Client {
 // getTokenHits returns whether the token exists and its value if so.
 func getTokenHits(redisKey string, client *redis.Client) (ok bool, valueInt int) {
 	value, err := client.Get(redisKey).Result()
-	if err != redis.Nil && err != nil {
-		panic(fmt.Errorf("getting key %s failed: %s", redisKey, err))
+	ok = err == nil
+	if !ok {
+		return
 	}
-	ok = err != redis.Nil
-	if value == "" {
-		valueInt = 0
-	} else {
-		intVal, convErr := strconv.Atoi(value)
-		if convErr != nil {
-			panic(fmt.Errorf("value %s from key %s could not be converted to integer: %s", value, redisKey, err))
-		}
+
+	if intVal, convErr := strconv.Atoi(value); convErr == nil {
 		valueInt = intVal
+	} else {
+		panic(fmt.Errorf("value %s from key %s could not be converted to integer: %s", value, redisKey, convErr))
 	}
+	return
+}
+
+// getTokenTTL returns the time to live of this token, as a time.Time, if the TTL is in the future.
+func getTokenTTL(redisKey string, client *redis.Client) (ok bool, expiry time.Time) {
+	ttl, err := client.TTL(redisKey).Result()
+	ok = err == nil && ttl > 0
+	expiry = time.Now().Add(ttl)
 	return
 }
 
@@ -47,9 +52,7 @@ func incrToken(redisKey string, client *redis.Client) {
 	}
 }
 
-// setToken creates a new nonce and sets its expiration date and returns the expiration time.
+// setToken creates a new nonce and sets its expiration date.
 func setToken(redisKey string, dur time.Duration, client *redis.Client) {
-	if err := client.Set(redisKey, 0, dur).Err(); err != redis.Nil && err != nil {
-		panic(fmt.Errorf("setting token %s failed %s", redisKey, err))
-	}
+	client.Set(redisKey, 0, dur)
 }

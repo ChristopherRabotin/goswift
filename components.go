@@ -1,4 +1,4 @@
-package main
+package goswift
 
 import (
 	"github.com/gin-gonic/gin"

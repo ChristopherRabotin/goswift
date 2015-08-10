@@ -1,4 +1,4 @@
-package settings
+package goswift
 
 import (
 	"fmt"
@@ -7,9 +7,6 @@ import (
 	"runtime"
 	"strconv"
 )
-
-// log is the main go-logging logger.
-var log = logging.MustGetLogger("settings")
 
 // CheckEnvVars checks that all the environment variables required are set, without checking their value. It will panic if one is missing.
 func CheckEnvVars() {

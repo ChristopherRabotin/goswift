@@ -1,10 +1,8 @@
-package auth
+package goswift
 
 import (
-	"errors"
 	"fmt"
 	"github.com/ChristopherRabotin/gin-contrib-headerauth"
-	"github.com/Sparrho/goswift/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/jmcvetta/randutil"
 	"gopkg.in/redis.v3"
@@ -25,19 +23,50 @@ type PerishableToken struct {
 	*headerauth.TokenManager
 }
 
+// RedisCnx stores an instance of the redis client.
 var RedisCnx = redisClient()
 
 // CheckHeader returns the secret key from the provided access key.
 func (m PerishableToken) CheckHeader(auth *headerauth.AuthInfo, req *http.Request) (err *headerauth.AuthErr) {
 	auth.Secret = ""     // There is no secret key, just an access key.
 	auth.DataToSign = "" // There is no data to sign.
-	if ok, attempts := getTokenHits(PerishableRedisKey(auth.AccessKey), m.redisClient); !ok || (ok && attempts >= NonceLimit) {
-		// Note: if we've hit the max usage limit, we just return an error and wait for Redis to
-		// handle its expiration.
-		err = &headerauth.AuthErr{401, errors.New("invalid token")}
+	// Let's check if we have that token in cache, if not we'll check on Redis.
+	if cached, exists := perishableCache[auth.AccessKey]; exists {
+		if cached.isValid() {
+			cached.Hits++
+			go func() {
+				incrToken(PerishableRedisKey(auth.AccessKey), m.redisClient)
+			}()
+		} else {
+			err = &headerauth.AuthErr{401, fmt.Errorf("token expired in cache: [%s]", auth.AccessKey)}
+		}
 		return
 	}
-	incrToken(PerishableRedisKey(auth.AccessKey), m.redisClient)
+	// TODO: if key not in cache, get the key from redis and its value. If the key does not exist, return an error.
+	// If the key exists but isn't in cache get to TTL to add it to the cache. This should be as a go routine to not cause lag.
+	exists, attempts := getTokenHits(PerishableRedisKey(auth.AccessKey), m.redisClient)
+	if !exists {
+		// The key does not exist on Redis, let's return an error.
+		err = &headerauth.AuthErr{401, fmt.Errorf("token not on Redis: [%s]", auth.AccessKey)}
+		return
+	}
+	// Let's add this token to the cache.
+	exists, ttl := getTokenTTL(PerishableRedisKey(auth.AccessKey), m.redisClient)
+	if !exists {
+		// The key has expired between when we checked its existence and when we got its TTL.
+		err = &headerauth.AuthErr{401, fmt.Errorf("token expired on Redis: [%s]", auth.AccessKey)}
+		return
+	}
+	// Let's store this perishable token in the cache. Because we're using it now, let's increment it locally now.
+	perishable := &PerishableInfo{attempts + 1, ttl}
+	if !perishable.isValid() {
+		err = &headerauth.AuthErr{401, fmt.Errorf("token expired on load from Redis: [%s]", auth.AccessKey)}
+		return
+	}
+	perishableCache[auth.AccessKey] = perishable
+	go func() {
+		incrToken(PerishableRedisKey(auth.AccessKey), m.redisClient)
+	}()
 	return
 }
 
@@ -48,28 +77,34 @@ func (m PerishableToken) Authorize(auth *headerauth.AuthInfo) (val interface{}, 
 
 // PreAbort sets the appropriate error JSON.
 func (m PerishableToken) PreAbort(c *gin.Context, auth *headerauth.AuthInfo, err *headerauth.AuthErr) {
-	c.JSON(err.Status, utils.StatusMsg[err.Status].JSON())
+	c.JSON(err.Status, StatusMsg[err.Status].JSON())
 }
 
+// NewPerishableTokenMgr returns a new PerishableToken auth manager.
 func NewPerishableTokenMgr(prefix string, contextKey string) *PerishableToken {
 	return &PerishableToken{RedisCnx, headerauth.NewTokenManager("Authorization", prefix, contextKey)}
 }
 
 // PerishableInfo stores perisable token information.
 type PerishableInfo struct {
-	hits    int
-	expires time.Time
+	Hits    int
+	Expires time.Time
 }
 
-var perishableCache = make(map[string]PerishableInfo)
+// isValid returs whether this token is still valid or not.
+func (p PerishableInfo) isValid() bool {
+	return p.Hits < NonceLimit && p.Expires.After(time.Now())
+}
+
+var perishableCache = make(map[string]*PerishableInfo)
 
 // PerishableRedisKey returns the formatted Redis key for the provided perishable token.
 func PerishableRedisKey(token string) string {
 	return fmt.Sprintf("goswift:perishabletoken:%s", token)
 }
 
-// GetToken returns a JSON object which contains a new NONCE with its expiration time and the number of allowed usages.
-func GetToken(c *gin.Context) {
+// GetNewToken returns a JSON object which contains a new NONCE with its expiration time and the number of allowed usages.
+func GetNewToken(c *gin.Context) {
 	failed := true
 	// Allow up to ten attempts to generate an access key.
 	for iter := 0; iter < 10; iter++ {
@@ -83,6 +118,7 @@ func GetToken(c *gin.Context) {
 				// We calculate the expire time prior to actually setting it so the client
 				// can switch to another Nonce before it actually expires.
 				expires := time.Now().Add(NonceTTL)
+				perishableCache[token] = &PerishableInfo{0, expires}
 				setToken(PerishableRedisKey(token), NonceTTL, RedisCnx)
 				c.JSON(200, gin.H{"token": token, "expires": expires.Format(time.RFC3339), "limit": NonceLimit})
 				failed = false
@@ -93,6 +129,6 @@ func GetToken(c *gin.Context) {
 
 	if failed {
 		// Could not generate a valid token.
-		c.JSON(503, utils.Status503.JSON())
+		c.JSON(503, Status503.JSON())
 	}
 }

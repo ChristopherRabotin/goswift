@@ -1,10 +1,8 @@
-package main
+package goswift
 
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Sparrho/goswift/auth"
-	"github.com/Sparrho/goswift/settings"
 	. "github.com/smartystreets/goconvey/convey"
 	"io"
 	"net/http"
@@ -48,22 +46,22 @@ func TestSwift(t *testing.T) {
 			Error string
 		}
 
-		settings.ConfigureLogger()
-		settings.ConfigureRuntime()
+		ConfigureLogger()
+		ConfigureRuntime()
 		e := PourGin()
 		Convey("GET root redirects", func() {
 			req := performRequest(e, "GET", "/", nil, nil)
 			So(req.Code, ShouldEqual, 303)
 		})
 
-		Convey("Perishable Tokens can be generated", func() {
+		Convey("Perishable Tokens can be generated and stored on this instance", func() {
 			req := performRequest(e, "GET", "/auth/token", nil, nil)
 			So(req.Code, ShouldEqual, 200)
 			var tok TokenResponse
 			json.Unmarshal(req.Body.Bytes(), &tok)
 
-			So(tok.Limit, ShouldEqual, auth.NonceLimit)
-			expirationValid := tok.Expires.Sub(time.Now()) < auth.NonceTTL
+			So(tok.Limit, ShouldEqual, NonceLimit)
+			expirationValid := tok.Expires.Sub(time.Now()) < NonceTTL
 			So(expirationValid, ShouldEqual, true)
 
 			Convey("And can be used on the auth test endpoint for all methods until its limit", func() {
@@ -80,7 +78,7 @@ func TestSwift(t *testing.T) {
 				}
 
 				// Let's check that the token will perish after the limit is hit.
-				remaining := auth.NonceLimit - tok.NumUsed
+				remaining := NonceLimit - tok.NumUsed
 				for i := 0; i < remaining; i++ {
 					So(performRequest(e, "GET", "/auth/token/test/", headers, nil).Code, ShouldEqual, 200)
 					tok.NumUsed++
@@ -96,11 +94,88 @@ func TestSwift(t *testing.T) {
 			})
 		})
 
+		Convey("Perishable Tokens can be retrieved from redis", func() {
+			req := performRequest(e, "GET", "/auth/token", nil, nil)
+			So(req.Code, ShouldEqual, 200)
+			var tok TokenResponse
+			json.Unmarshal(req.Body.Bytes(), &tok)
+
+			So(tok.Limit, ShouldEqual, NonceLimit)
+			expirationValid := tok.Expires.Sub(time.Now()) < NonceTTL
+			So(expirationValid, ShouldEqual, true)
+			_, tokenInCache := perishableCache[tok.Token]
+			So(tokenInCache, ShouldEqual, true)
+			delete(perishableCache, tok.Token)
+			_, tokenInCache = perishableCache[tok.Token]
+			So(tokenInCache, ShouldEqual, false)
+
+			Convey("And can be used on the auth test endpoint for all methods until its limit", func() {
+				headers := make(map[string][]string)
+				headers["Authorization"] = []string{"DecayingToken " + tok.Token}
+				for _, meth := range methods {
+					req := performRequest(e, meth, "/auth/token/test/", headers, nil)
+					tok.NumUsed++ // Incrementing the number of times this one was used to confirm it will expire later.
+					var resp SuccessResponse
+					json.Unmarshal(req.Body.Bytes(), &resp)
+
+					So(req.Code, ShouldEqual, 200)
+					So(resp.Method, ShouldEqual, meth)
+				}
+
+				// Let's check that the token will perish after the limit is hit.
+				remaining := NonceLimit - tok.NumUsed
+				for i := 0; i < remaining; i++ {
+					So(performRequest(e, "GET", "/auth/token/test/", headers, nil).Code, ShouldEqual, 200)
+					tok.NumUsed++
+				}
+
+				req := performRequest(e, "GET", "/auth/token/test/", headers, nil)
+				var resp ErrorResponse
+				json.Unmarshal(req.Body.Bytes(), &resp)
+
+				So(req.Code, ShouldEqual, 401)
+				So(resp.Error, ShouldEqual, "unauthorized")
+
+			})
+
+			Convey("And the token could have timed out on Redis", func() {
+				// Let's update this token on Redis to an invalid number of hits.
+				redisClient().Set(PerishableRedisKey(tok.Token), NonceLimit+1, 0)
+
+				headers := make(map[string][]string)
+				headers["Authorization"] = []string{"DecayingToken " + tok.Token}
+
+				req := performRequest(e, "GET", "/auth/token/test/", headers, nil)
+				var resp ErrorResponse
+				json.Unmarshal(req.Body.Bytes(), &resp)
+
+				So(req.Code, ShouldEqual, 401)
+				So(resp.Error, ShouldEqual, "unauthorized")
+
+			})
+
+			Convey("And the token could have reached max hits on Redis", func() {
+				// Let's update this token on Redis to an invalid number of hits.
+				redisClient().Set(PerishableRedisKey(tok.Token), NonceLimit+1, time.Minute*5)
+
+				headers := make(map[string][]string)
+				headers["Authorization"] = []string{"DecayingToken " + tok.Token}
+
+				req := performRequest(e, "GET", "/auth/token/test/", headers, nil)
+				var resp ErrorResponse
+				json.Unmarshal(req.Body.Bytes(), &resp)
+
+				So(req.Code, ShouldEqual, 401)
+				So(resp.Error, ShouldEqual, "unauthorized")
+
+			})
+		})
+
 		Convey("Invalid Persishable Tokens fail on the test endpoints fails for all methods", func() {
 			headers := make(map[string][]string)
 			invalidToken := "someinvalidtoken"
 			// Let's make sure we remove this from redis.
-			auth.RedisCnx.Del(auth.PerishableRedisKey(invalidToken))
+			RedisCnx.Del(PerishableRedisKey(invalidToken))
 			headers["Authorization"] = []string{"DecayingToken " + invalidToken}
 			for _, meth := range methods {
 				req := performRequest(e, meth, "/auth/token/test/", headers, nil)
