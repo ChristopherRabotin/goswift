@@ -7,6 +7,7 @@ import (
 	"github.com/jmcvetta/randutil"
 	"gopkg.in/redis.v3"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -77,6 +78,7 @@ func (m PerishableToken) Authorize(auth *headerauth.AuthInfo) (val interface{}, 
 
 // PreAbort sets the appropriate error JSON.
 func (m PerishableToken) PreAbort(c *gin.Context, auth *headerauth.AuthInfo, err *headerauth.AuthErr) {
+	log.Critical(c.Request.RequestURI)
 	c.JSON(err.Status, StatusMsg[err.Status].JSON())
 }
 
@@ -131,4 +133,31 @@ func GetNewToken(c *gin.Context) {
 		// Could not generate a valid token.
 		c.JSON(503, Status503.JSON())
 	}
+}
+
+type AnalyticsToken struct {
+	persistC chan<- S3Persister
+	wg       *sync.WaitGroup
+	*PerishableToken
+}
+
+// PreAbort sets the appropriate error JSON after starting the persistence.
+func (m AnalyticsToken) PreAbort(c *gin.Context, auth *headerauth.AuthInfo, err *headerauth.AuthErr) {
+	m.wg.Add(1)
+	c.Set(m.ContextKey(), auth.AccessKey)
+	c.Set("authSuccess", false)
+	m.persistC <- NewS3Persist("analytics", false, c)
+	c.JSON(err.Status, StatusMsg[err.Status].JSON())
+}
+
+// PostAuth starte the persistence.
+func (m AnalyticsToken) PostAuth(c *gin.Context, auth *headerauth.AuthInfo, err *headerauth.AuthErr) {
+	m.wg.Add(1)
+	c.Set("authSuccess", true)
+	m.persistC <- NewS3Persist("analytics", false, c)
+}
+
+// NewAnalyticsTokenMgr returns a new AnalyticsToken auth manager, which is PerishableToken with S3 persistence.
+func NewAnalyticsTokenMgr(prefix string, contextKey string, persistChan chan<- S3Persister, wg *sync.WaitGroup) *AnalyticsToken {
+	return &AnalyticsToken{persistChan, wg, NewPerishableTokenMgr(prefix, contextKey)}
 }

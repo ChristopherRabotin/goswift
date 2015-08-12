@@ -14,3 +14,8 @@ func IndexGet(c *gin.Context) {
 func SuccessJSON(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"method": c.Request.Method})
 }
+
+// RecordAnalytics handles the recording of an analytics event.
+func RecordAnalytics(c *gin.Context) {
+	c.String(http.StatusAccepted, "")
+}

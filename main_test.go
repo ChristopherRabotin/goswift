@@ -188,6 +188,63 @@ func TestSwift(t *testing.T) {
 			}
 		})
 
+		Convey("Analytics endpoint works as expected", func() {
+			//Let's first grab a token.
+			req := performRequest(e, "GET", "/auth/token", nil, nil)
+			So(req.Code, ShouldEqual, 200)
+			var tok TokenResponse
+			json.Unmarshal(req.Body.Bytes(), &tok)
+
+			So(tok.Limit, ShouldEqual, NonceLimit)
+			So(tok.Expires.Sub(time.Now()) < NonceTTL, ShouldEqual, true)
+			Convey("By failing on all methods but PUT", func() {
+				headers := make(map[string][]string)
+				headers["Authorization"] = []string{"DecayingToken " + tok.Token}
+				for _, meth := range methods {
+					req := performRequest(e, meth, "/analytics/record", headers, nil)
+					tok.NumUsed++ // Incrementing the number of times this one was used to confirm it will expire later.
+					var resp SuccessResponse
+					json.Unmarshal(req.Body.Bytes(), &resp)
+					if meth == "PUT" {
+						So(req.Code, ShouldEqual, 202)
+						So(req.Body.String(), ShouldEqual, "")
+					} else {
+						So(req.Code, ShouldEqual, 404)
+					}
+				}
+			})
+
+			Convey("By failing if the token is invalid", func() {
+				headers := make(map[string][]string)
+				headers["Authorization"] = []string{"DecayingToken InvalidToken"}
+				for _, meth := range methods {
+					req := performRequest(e, meth, "/analytics/record", headers, nil)
+					tok.NumUsed++ // Incrementing the number of times this one was used to confirm it will expire later.
+					var resp SuccessResponse
+					json.Unmarshal(req.Body.Bytes(), &resp)
+					if meth == "PUT" {
+						So(req.Code, ShouldEqual, 401)
+					} else {
+						So(req.Code, ShouldEqual, 404)
+					}
+				}
+			})
+
+			Convey("PUT requests persist the data on S3", func() {
+				Convey("If the token is valid", func() {
+					headers := make(map[string][]string)
+					headers["Authorization"] = []string{"DecayingToken " + tok.Token}
+
+					req := performRequest(e, "PUT", "/analytics/record", headers, nil)
+					tok.NumUsed++ // Incrementing the number of times this one was used to confirm it will expire later.
+					var resp SuccessResponse
+					json.Unmarshal(req.Body.Bytes(), &resp)
+					So(req.Code, ShouldEqual, 202)
+
+				})
+			})
+		})
+
 	})
 }
 
