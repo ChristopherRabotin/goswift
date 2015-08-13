@@ -36,7 +36,8 @@ func PourGin() *gin.Engine {
 	engine := gin.Default()
 	engine.GET("/", IndexGet)
 	// S3 persister variables
-	persistChan := make(chan S3Persister, 250)
+	persistChan := make(chan *S3Persist, 250)
+	go S3PersistingHandler(persistChan, &persisterWg)
 
 	// Auth managers
 	perishableHA := NewPerishableTokenMgr("DecayingToken", "token")

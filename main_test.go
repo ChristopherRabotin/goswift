@@ -1,8 +1,10 @@
 package goswift
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/jmcvetta/randutil"
 	. "github.com/smartystreets/goconvey/convey"
 	"io"
 	"net/http"
@@ -16,7 +18,7 @@ import (
 func TestSwift(t *testing.T) {
 	testGoswift = true
 	// Setting some environment variables.
-	testSettings := map[string]string{"MAX_CPUS": "1", "AWS_STORAGE_BUCKET_NAME": "sparrho-static-staging",
+	testSettings := map[string]string{"MAX_CPUS": "1", "AWS_STORAGE_BUCKET_NAME": "sparrho-content",
 		"SERVER_MODE": "debug", "LOG_LEVEL": "DEBUG"}
 	for env, val := range testSettings {
 		err := os.Setenv(env, val)
@@ -189,6 +191,7 @@ func TestSwift(t *testing.T) {
 		})
 
 		Convey("Analytics endpoint works as expected", func() {
+
 			//Let's first grab a token.
 			req := performRequest(e, "GET", "/auth/token", nil, nil)
 			So(req.Code, ShouldEqual, 200)
@@ -217,8 +220,9 @@ func TestSwift(t *testing.T) {
 			Convey("By failing if the token is invalid", func() {
 				headers := make(map[string][]string)
 				headers["Authorization"] = []string{"DecayingToken InvalidToken"}
+
 				for _, meth := range methods {
-					req := performRequest(e, meth, "/analytics/record", headers, nil)
+					req := performRequest(e, meth, "/analytics/record", headers, NewAnalyticsEvent().JSON())
 					tok.NumUsed++ // Incrementing the number of times this one was used to confirm it will expire later.
 					var resp SuccessResponse
 					json.Unmarshal(req.Body.Bytes(), &resp)
@@ -235,7 +239,7 @@ func TestSwift(t *testing.T) {
 					headers := make(map[string][]string)
 					headers["Authorization"] = []string{"DecayingToken " + tok.Token}
 
-					req := performRequest(e, "PUT", "/analytics/record", headers, nil)
+					req := performRequest(e, "PUT", "/analytics/record", headers, NewAnalyticsEvent().JSON())
 					tok.NumUsed++ // Incrementing the number of times this one was used to confirm it will expire later.
 					var resp SuccessResponse
 					json.Unmarshal(req.Body.Bytes(), &resp)
@@ -255,4 +259,26 @@ func performRequest(r http.Handler, method string, path string, headers map[stri
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
+}
+
+// AnalyticsJSON stores an analytics event as JSON.
+type AnalyticsJSON struct {
+	user_agent string
+	referer    string
+	km_ai      string
+	session_id string
+	url_path   string
+	client_ip  string
+}
+
+func (e AnalyticsJSON) JSON() (buf io.Reader) {
+	jsonBody, _ := json.Marshal(&e)
+	buf = bytes.NewBuffer(jsonBody)
+	return
+}
+
+func NewAnalyticsEvent() *AnalyticsJSON {
+	randToken, _ := randutil.AlphaStringRange(10, 10)
+	return &AnalyticsJSON{client_ip: "127.0.0.1", km_ai: randToken[0:7], session_id: "session_" + randToken[5:10],
+		user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:39.0) Gecko/20100101 Firefox/39.0", url_path: "http://sparrho.com/awesome/link"}
 }
