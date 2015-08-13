@@ -42,7 +42,7 @@ type S3Persist struct {
 	path        string
 	Indexed     bool
 	Context     *gin.Context
-	cBody       string
+	CBody       string
 	contentPath string
 }
 
@@ -52,7 +52,10 @@ func (p S3Persist) SetBody() {
 		if err != nil {
 			panic("could not read body")
 		}
-		p.cBody = string(body)
+		p.CBody = string(body)
+		fmt.Printf("-->%+v", p)
+	}else{
+		fmt.Println("body is nil!")
 	}
 }
 
@@ -87,13 +90,13 @@ func (p S3Persist) IndexInfo() *S3Index {
 
 // serialize returns what is to be serialized and saved to S3.
 func (p S3Persist) Serialize() string {
-	return p.cBody
+	return p.CBody
 }
 
 // checksum returns the checksum of this analytics event, which is not used for analytics.
 func (p S3Persist) Checksum() string {
 	hash := sha512.New384()
-	hash.Write([]byte(p.cBody))
+	hash.Write([]byte(p.CBody))
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
@@ -109,8 +112,6 @@ func (p S3Persist) Location() string {
 		now := time.Now().UTC()
 		y, m, d := now.Date()
 		successIft, _ := p.Context.Get("authSuccess")
-		fmt.Printf("context=%+v\n", p.Context.Keys)
-		fmt.Printf("successIft=%+v\n", successIft)
 		if success, ok := successIft.(bool); ok {
 			if success {
 				loc += "valid/"
@@ -122,7 +123,6 @@ func (p S3Persist) Location() string {
 		}
 		loc += fmt.Sprintf("%04d_%02d_%02d/%02d00/", y, m, d, now.Hour())
 		accessKeyItf, _ := p.Context.Get("token")
-		fmt.Printf("accessKeyItf=%+v\n", accessKeyItf)
 		if accessKey, ok := accessKeyItf.(string); ok {
 			loc += accessKey
 		} else {
@@ -135,10 +135,11 @@ func (p S3Persist) Location() string {
 	return p.contentPath
 }
 
-func NewS3Persist(path string, indexed bool, c *gin.Context) *S3Persist {
+func NewS3Persist(path string, indexed bool, c *gin.Context) S3Persist {
 	p := S3Persist{path: path, Indexed: indexed, Context: c}
 	p.SetBody()
-	return &p
+	fmt.Printf("||%+v\n", p)
+	return p
 }
 
 // S3BucketFromOS returns the bucket from the environment variables (cf. README.md).
@@ -153,7 +154,7 @@ func S3BucketFromOS() *s3.Bucket {
 }
 
 // S3PersistingHandler stores information from the contextChan onto S3.
-func S3PersistingHandler(persistChan chan *S3Persist, wg *sync.WaitGroup) {
+func S3PersistingHandler(persistChan chan S3Persist, wg *sync.WaitGroup) {
 	bucket := S3BucketFromOS()
 	for {
 		persist, open := <-persistChan
@@ -161,7 +162,7 @@ func S3PersistingHandler(persistChan chan *S3Persist, wg *sync.WaitGroup) {
 			log.Info("Persist channel is closed. Server probably shutting down.")
 			return
 		}
-
+		fmt.Printf("==>%+v\n", persist)
 		// If this is an indexed persistence, let's check uniqueness.
 		if iInfo := persist.IndexInfo(); iInfo.Enabled {
 			indexData, notFoundErr := bucket.Get(iInfo.Location)
@@ -175,6 +176,7 @@ func S3PersistingHandler(persistChan chan *S3Persist, wg *sync.WaitGroup) {
 					continue
 				}
 				// We should stop processing this request now.
+				// TODO: Determine how to do that, possible by setting a context value?
 
 			} else {
 				// Store the content on S3 and create an index.
@@ -207,6 +209,7 @@ func S3PersistingHandler(persistChan chan *S3Persist, wg *sync.WaitGroup) {
 				log.Error("could not PUT new content on %s: %s", bucket.Name, s3Err)
 				continue
 			}
+			fmt.Printf("--->PUT to %s [%+v]\n", persist.Location(), persist.Serialize())
 		}
 
 		wg.Done()
