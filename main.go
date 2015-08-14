@@ -11,9 +11,13 @@ import (
 // testGoswift must be true when testing to avoid starting the server.
 var testGoswift = false
 
+// testS3Locations will store the list of S3 locations to delete after running the tests.
+var testS3Locations []string
+
 // log is the main go-logging logger.
 var log = logging.MustGetLogger("goswift")
 
+// persisterWg is the persister wait group, which will write to S3.
 var persisterWg sync.WaitGroup
 
 // init is ran before the main, so we'll perform the environment verifications there.
@@ -36,7 +40,7 @@ func PourGin() *gin.Engine {
 	engine := gin.Default()
 	engine.GET("/", IndexGet)
 	// S3 persister variables
-	persistChan := make(chan S3Persist, 250)
+	persistChan := make(chan *S3Persist, 250)
 	go S3PersistingHandler(persistChan, &persisterWg)
 
 	// Auth managers
@@ -58,7 +62,9 @@ func PourGin() *gin.Engine {
 	analyticsG := engine.Group("/analytics")
 	analyticsG.Use(headerauth.HeaderAuth(analyticsHA))
 	analyticsG.PUT("/record", RecordAnalytics)
-	if !testGoswift {
+	if testGoswift {
+		testS3Locations = make([]string, 20)
+	} else {
 		// Starting the server.
 		engine.Run(ServerConfig())
 		return nil

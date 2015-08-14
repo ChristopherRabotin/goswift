@@ -136,7 +136,7 @@ func GetNewToken(c *gin.Context) {
 }
 
 type AnalyticsToken struct {
-	persistC chan<- S3Persist
+	persistC chan<- *S3Persist
 	wg       *sync.WaitGroup
 	*PerishableToken
 }
@@ -154,12 +154,10 @@ func (m AnalyticsToken) PreAbort(c *gin.Context, auth *headerauth.AuthInfo, err 
 func (m AnalyticsToken) PostAuth(c *gin.Context, auth *headerauth.AuthInfo, err *headerauth.AuthErr) {
 	m.wg.Add(1)
 	c.Set("authSuccess", true)
-	pp := NewS3Persist("analytics", false, c)
-	fmt.Printf("PostAuth: %+v\n", pp)
-	m.persistC <- pp
+	m.persistC <- NewS3Persist("analytics", false, c)
 }
 
 // NewAnalyticsTokenMgr returns a new AnalyticsToken auth manager, which is PerishableToken with S3 persistence.
-func NewAnalyticsTokenMgr(prefix string, contextKey string, persistChan chan<- S3Persist, wg *sync.WaitGroup) *AnalyticsToken {
+func NewAnalyticsTokenMgr(prefix string, contextKey string, persistChan chan<- *S3Persist, wg *sync.WaitGroup) *AnalyticsToken {
 	return &AnalyticsToken{persistChan, wg, NewPerishableTokenMgr(prefix, contextKey)}
 }
