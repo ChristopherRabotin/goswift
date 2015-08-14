@@ -63,7 +63,7 @@ func PourGin() *gin.Engine {
 	analyticsG.Use(headerauth.HeaderAuth(analyticsHA))
 	analyticsG.PUT("/record", RecordAnalytics)
 	if testGoswift {
-		testS3Locations = make([]string, 20)
+		testS3Locations = make([]string, 0) // Allows append to assign directly to zeroth element.
 	} else {
 		// Starting the server.
 		engine.Run(ServerConfig())

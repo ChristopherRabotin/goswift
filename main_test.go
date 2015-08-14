@@ -193,6 +193,9 @@ func TestSwift(t *testing.T) {
 
 		Convey("Analytics endpoint works as expected", func() {
 
+			// Grab the bucket from the environment for tests.
+			bucket := S3BucketFromOS()
+
 			//Let's first grab a token.
 			req := performRequest(e, "GET", "/auth/token", nil, nil)
 			So(req.Code, ShouldEqual, 200)
@@ -202,6 +205,16 @@ func TestSwift(t *testing.T) {
 			So(tok.Limit, ShouldEqual, NonceLimit)
 			So(tok.Expires.Sub(time.Now()) < NonceTTL, ShouldEqual, true)
 			Convey("By failing on all methods but PUT", func() {
+
+				// Let's always delete the test S3 locations at the end of tests.
+				defer func() {
+					for i := range testS3Locations {
+						go func(path string) {
+							bucket.Del(path)
+						}(testS3Locations[i])
+					}
+				}()
+
 				headers := make(map[string][]string)
 				headers["Authorization"] = []string{"DecayingToken " + tok.Token}
 				for _, meth := range methods {
@@ -222,6 +235,15 @@ func TestSwift(t *testing.T) {
 				headers := make(map[string][]string)
 				headers["Authorization"] = []string{"DecayingToken InvalidToken"}
 
+				// Let's always delete the test S3 locations at the end of tests.
+				defer func() {
+					for i := range testS3Locations {
+						go func(path string) {
+							bucket.Del(path)
+						}(testS3Locations[i])
+					}
+				}()
+
 				for _, meth := range methods {
 					event := NewAnalyticsEvent()
 					req := performRequest(e, meth, "/analytics/record", headers, event.JSONIO())
@@ -231,6 +253,11 @@ func TestSwift(t *testing.T) {
 						So(req.Code, ShouldEqual, 401)
 						persisterWg.Wait()
 						// Let's check that there's is the appropriate value on S3.
+						if data, err := bucket.Get(testS3Locations[0]); err == nil {
+							So(string(data), ShouldEqual, string(event.JSON()))
+						} else {
+							panic(err)
+						}
 					} else {
 						So(req.Code, ShouldEqual, 404)
 					}
@@ -239,15 +266,32 @@ func TestSwift(t *testing.T) {
 
 			Convey("PUT requests persist the data on S3", func() {
 				Convey("If the token is valid", func() {
+
+					// Let's always delete the test S3 locations at the end of tests.
+					defer func() {
+						for i := range testS3Locations {
+							go func(path string) {
+								bucket.Del(path)
+							}(testS3Locations[i])
+						}
+					}()
+
 					headers := make(map[string][]string)
 					headers["Authorization"] = []string{"DecayingToken " + tok.Token}
 
-					req := performRequest(e, "PUT", "/analytics/record", headers, NewAnalyticsEvent().JSONIO())
+					event := NewAnalyticsEvent()
+					req := performRequest(e, "PUT", "/analytics/record", headers, event.JSONIO())
 					tok.NumUsed++ // Incrementing the number of times this one was used to confirm it will expire later.
 					var resp SuccessResponse
 					json.Unmarshal(req.Body.Bytes(), &resp)
 					So(req.Code, ShouldEqual, 202)
 					persisterWg.Wait()
+					// Let's check that there's is the appropriate value on S3.
+					if data, err := bucket.Get(testS3Locations[0]); err == nil {
+						So(string(data), ShouldEqual, string(event.JSON()))
+					} else {
+						panic(err)
+					}
 				})
 			})
 		})

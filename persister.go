@@ -78,6 +78,8 @@ func NewS3Persist(s3path string, indexed bool, c *gin.Context) *S3Persist {
 	cLoc := rootPath + storePath
 	if testGoswift {
 		cLoc += "/test"
+	} else {
+		cLoc += "/live"
 	}
 	now := time.Now().UTC()
 	y, m, d := now.Date()
@@ -95,6 +97,8 @@ func NewS3Persist(s3path string, indexed bool, c *gin.Context) *S3Persist {
 		iLoc := rootPath + storePath
 		if testGoswift {
 			iLoc += "/test"
+		} else {
+			iLoc += "/live"
 		}
 		iLoc += indexFolder + "/" + p.s3path + "/" + successFolder + "/" + accessKey + "_" + p.Checksum
 
@@ -175,7 +179,6 @@ func S3PersistingHandler(persistChan chan *S3Persist, wg *sync.WaitGroup) {
 				log.Error("could not PUT new content on %s: %s", bucket.Name, s3Err)
 				continue
 			}
-			fmt.Printf("--->PUT to %s [%+v]\n", persist.ContentPath, persist.Serialized)
 		}
 
 		wg.Done()
