@@ -85,14 +85,13 @@ func NewS3Persist(s3path string, indexed bool, c *gin.Context) *S3Persist {
 	y, m, d := now.Date()
 
 	cLoc += fmt.Sprintf("%s/%s/%s/%04d_%02d_%02d/%02d00/", dataFolder, p.s3path, successFolder, y, m, d, now.Hour())
-	randStr, _ := randutil.AlphaStringRange(8, 16)
 
-	p.ContentPath = cLoc + accessKey + "_" + p.Checksum + "_" + randStr
-	if testGoswift {
-		testS3Locations = append(testS3Locations, p.ContentPath)
-	}
+	p.ContentPath = cLoc + accessKey
 
 	if indexed {
+		// If this is an indexed item, then we store each item in a different file. Otherwise, we just append the file.
+		randStr, _ := randutil.AlphaStringRange(8, 16)
+		p.ContentPath += "_" + p.Checksum + "_" + randStr
 		// Let's determine where the index should be.
 		iLoc := rootPath + storePath
 		if testGoswift {
@@ -108,6 +107,10 @@ func NewS3Persist(s3path string, indexed bool, c *gin.Context) *S3Persist {
 		if testGoswift {
 			testS3Locations = append(testS3Locations, p.Index.Location)
 		}
+	}
+
+	if testGoswift {
+		testS3Locations = append(testS3Locations, p.ContentPath)
 	}
 
 	return &p
@@ -135,7 +138,7 @@ func S3PersistingHandler(persistChan chan *S3Persist, wg *sync.WaitGroup) {
 		}
 		// If this is an indexed persistence, let's check uniqueness.
 		if persist.Index != nil {
-			indexData, notFoundErr := bucket.Get(persist.Index.Location)
+			indexData, notFoundErr := bucket.Get(persist.Index.Location) // notFoundErr => if there is an err Get failed, so the file does not exist.
 			if notFoundErr == nil {
 				// Append index content to the existing index.
 				s3Err := bucket.Put(persist.Index.Location, []byte(string(indexData)+persist.Index.Body), "text/plain", s3.Private)
@@ -168,13 +171,18 @@ func S3PersistingHandler(persistChan chan *S3Persist, wg *sync.WaitGroup) {
 						panic(fmt.Sprintf("Could not add index: %+v", persist.Index))
 					}
 				}
-
 			}
 		} else {
-			// This is not indexed, so let's persist it to S3 directly.
-			s3Err := bucket.Put(persist.ContentPath, []byte(persist.Serialized), "text/plain", s3.Private)
+			// This is not indexed, so let's persist it to S3 by adding it to the already present file, or appending to it.
+			oldData, notFoundErr := bucket.Get(persist.Index.Location)
+			newData := ""
+			if notFoundErr == nil {
+				newData += string(oldData) + "\n"
+				// Append index content to the existing index.
+			}
+			s3Err := bucket.Put(persist.ContentPath, []byte(newData), "text/plain", s3.Private)
 			if s3Err != nil {
-				// If somethting goes wrong, let's re-add this fetch to items to be processed.
+				// If somethting goes wrong, let's re-add this persistor to items to be persisted.
 				persistChan <- persist
 				log.Error("could not PUT new content on %s: %s", bucket.Name, s3Err)
 				continue
