@@ -207,13 +207,7 @@ func TestSwift(t *testing.T) {
 			Convey("By failing on all methods but PUT", func() {
 
 				// Let's always delete the test S3 locations at the end of tests.
-				defer func() {
-					for i := range testS3Locations {
-						go func(path string) {
-							bucket.Del(path)
-						}(testS3Locations[i])
-					}
-				}()
+				defer rmTestS3Files()
 
 				headers := make(map[string][]string)
 				headers["Authorization"] = []string{"DecayingToken " + tok.Token}
@@ -236,62 +230,71 @@ func TestSwift(t *testing.T) {
 				headers["Authorization"] = []string{"DecayingToken InvalidToken"}
 
 				// Let's always delete the test S3 locations at the end of tests.
-				defer func() {
-					for i := range testS3Locations {
-						go func(path string) {
-							bucket.Del(path)
-						}(testS3Locations[i])
-					}
-				}()
+				defer rmTestS3Files()
 
 				for _, meth := range methods {
-					event := NewAnalyticsEvent()
-					req := performRequest(e, meth, "/analytics/record", headers, event.JSONIO())
-					var resp ErrorResponse
-					json.Unmarshal(req.Body.Bytes(), &resp)
 					if meth == "PUT" {
-						So(req.Code, ShouldEqual, 401)
-						persisterWg.Wait()
-						// Let's check that there's is the appropriate value on S3.
-						if data, err := bucket.Get(testS3Locations[0]); err == nil {
-							So(string(data), ShouldEqual, string(event.JSON()))
-						} else {
-							panic(err)
-						}
-					} else {
-						So(req.Code, ShouldEqual, 404)
+						continue
 					}
+					So(performRequest(e, meth, "/analytics/record", headers, NewAnalyticsEvent().JSONIO()).Code, ShouldEqual, 404)
 				}
+				// Let's check that a PUT with an invalid token still persists the data.
+				expectedData := ""
+				for i := 0; i < 10; i++ {
+					event := NewAnalyticsEvent()
+					req := performRequest(e, "PUT", "/analytics/record", headers, event.JSONIO())
+					expectedData += string(event.JSON()) + "\n"
+					So(req.Code, ShouldEqual, 401)
+				}
+
+				var resp ErrorResponse
+				json.Unmarshal(req.Body.Bytes(), &resp)
+				persisterWg.Wait()
+				// Let's check that the S3 location is the same for all the events we just sent.
+				for i := 1; i < len(testS3Locations); i++ {
+					So(testS3Locations[0], ShouldEqual, testS3Locations[i])
+				}
+				// Let's check that there's is the appropriate value on S3.
+				if data, err := bucket.Get(testS3Locations[0]); err == nil {
+					So(string(data), ShouldEqual, expectedData)
+				} else {
+					panic(err)
+				}
+
 			})
 
 			Convey("PUT requests persist the data on S3", func() {
 				Convey("If the token is valid", func() {
 
 					// Let's always delete the test S3 locations at the end of tests.
-					defer func() {
-						for i := range testS3Locations {
-							go func(path string) {
-								bucket.Del(path)
-							}(testS3Locations[i])
-						}
-					}()
+					defer rmTestS3Files()
 
 					headers := make(map[string][]string)
 					headers["Authorization"] = []string{"DecayingToken " + tok.Token}
 
-					event := NewAnalyticsEvent()
-					req := performRequest(e, "PUT", "/analytics/record", headers, event.JSONIO())
-					tok.NumUsed++ // Incrementing the number of times this one was used to confirm it will expire later.
+					// Let's check that a PUT with an invalid token still persists the data.
+					expectedData := ""
+					for i := 0; i < 10; i++ {
+						event := NewAnalyticsEvent()
+						req := performRequest(e, "PUT", "/analytics/record", headers, event.JSONIO())
+						expectedData += string(event.JSON()) + "\n"
+						So(req.Code, ShouldEqual, 202)
+					}
+
 					var resp SuccessResponse
 					json.Unmarshal(req.Body.Bytes(), &resp)
-					So(req.Code, ShouldEqual, 202)
 					persisterWg.Wait()
+					// Let's check that the S3 location is the same for all the events we just sent.
+					for i := 1; i < len(testS3Locations); i++ {
+						So(testS3Locations[0], ShouldEqual, testS3Locations[i])
+					}
 					// Let's check that there's is the appropriate value on S3.
 					if data, err := bucket.Get(testS3Locations[0]); err == nil {
-						So(string(data), ShouldEqual, string(event.JSON()))
+						So(string(data), ShouldEqual, expectedData)
 					} else {
 						panic(err)
 					}
+
 				})
 			})
 		})
@@ -334,4 +337,13 @@ func NewAnalyticsEvent() *AnalyticsJSON {
 	randToken, _ := randutil.AlphaStringRange(10, 10)
 	return &AnalyticsJSON{IP: "127.0.0.1", KissMetric: randToken[0:7], Session: "session_" + randToken[5:10],
 		UserAgent: "Mozilla/5.0 (X11; Linux x86_64; rv:39.0) Gecko/20100101 Firefox/39.0", URL: "http://sparrho.com/awesome/link"}
+}
+
+func rmTestS3Files() {
+	bucket := S3BucketFromOS()
+	for i := range testS3Locations {
+		go func(path string) {
+			bucket.Del(path)
+		}(testS3Locations[i])
+	}
 }

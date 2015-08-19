@@ -174,13 +174,14 @@ func S3PersistingHandler(persistChan chan *S3Persist, wg *sync.WaitGroup) {
 			}
 		} else {
 			// This is not indexed, so let's persist it to S3 by adding it to the already present file, or appending to it.
-			oldData, notFoundErr := bucket.Get(persist.Index.Location)
-			newData := ""
+			oldData, notFoundErr := bucket.Get(persist.ContentPath)
+			data := persist.Serialized + "\n"
 			if notFoundErr == nil {
-				newData += string(oldData) + "\n"
-				// Append index content to the existing index.
+				// Append data to the existing data.
+				data = string(oldData) + data
 			}
-			s3Err := bucket.Put(persist.ContentPath, []byte(newData), "text/plain", s3.Private)
+
+			s3Err := bucket.Put(persist.ContentPath, []byte(data), "text/plain", s3.Private)
 			if s3Err != nil {
 				// If somethting goes wrong, let's re-add this persistor to items to be persisted.
 				persistChan <- persist
