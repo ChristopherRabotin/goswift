@@ -1,5 +1,5 @@
-// Package goswift is the main package for Goswift.
-package goswift
+// Package main is the main package for Goswift.
+package main
 
 import (
 	"github.com/ChristopherRabotin/gin-contrib-headerauth"

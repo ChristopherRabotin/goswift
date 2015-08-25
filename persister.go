@@ -1,4 +1,4 @@
-package goswift
+package main
 
 import (
 	"crypto/sha512"
