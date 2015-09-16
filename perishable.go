@@ -43,8 +43,6 @@ func (m PerishableToken) CheckHeader(auth *headerauth.AuthInfo, req *http.Reques
 		}
 		return
 	}
-	// TODO: if key not in cache, get the key from redis and its value. If the key does not exist, return an error.
-	// If the key exists but isn't in cache get to TTL to add it to the cache. This should be as a go routine to not cause lag.
 	exists, attempts := getTokenHits(PerishableRedisKey(auth.AccessKey), m.redisClient)
 	if !exists {
 		// The key does not exist on Redis, let's return an error.
