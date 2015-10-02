@@ -5,6 +5,7 @@ import (
 	"github.com/ChristopherRabotin/gin-contrib-headerauth"
 	"github.com/gin-gonic/gin"
 	"github.com/jmcvetta/randutil"
+	"github.com/pmylund/go-cache"
 	"gopkg.in/redis.v3"
 	"net/http"
 	"sync"
@@ -32,7 +33,8 @@ func (m PerishableToken) CheckHeader(auth *headerauth.AuthInfo, req *http.Reques
 	auth.Secret = ""     // There is no secret key, just an access key.
 	auth.DataToSign = "" // There is no data to sign.
 	// Let's check if we have that token in cache, if not we'll check on Redis.
-	if cached, exists := perishableCache[auth.AccessKey]; exists {
+	if cachedItf, exists := perishableCache.Get(auth.AccessKey); exists {
+		cached := cachedItf.(*PerishableInfo)
 		if cached.isValid() {
 			cached.Hits++
 			go func() {
@@ -62,7 +64,7 @@ func (m PerishableToken) CheckHeader(auth *headerauth.AuthInfo, req *http.Reques
 		err = &headerauth.AuthErr{401, fmt.Errorf("token expired on load from Redis: [%s]", auth.AccessKey)}
 		return
 	}
-	perishableCache[auth.AccessKey] = perishable
+	perishableCache.Set(auth.AccessKey, perishable, NonceTTL)
 	go func() {
 		incrToken(PerishableRedisKey(auth.AccessKey), m.redisClient)
 	}()
@@ -96,7 +98,7 @@ func (p PerishableInfo) isValid() bool {
 	return p.Hits < NonceLimit && p.Expires.After(time.Now())
 }
 
-var perishableCache = make(map[string]*PerishableInfo)
+var perishableCache = cache.New(NonceTTL, 50*time.Millisecond)
 
 // PerishableRedisKey returns the formatted Redis key for the provided perishable token.
 func PerishableRedisKey(token string) string {
@@ -109,7 +111,7 @@ func GetNewToken(c *gin.Context) {
 	// Allow up to ten attempts to generate an access key.
 	for iter := 0; iter < 10; iter++ {
 		if token, err := randutil.AlphaStringRange(10, 10); err == nil {
-			if _, inCache := perishableCache[token]; inCache {
+			if _, inCache := perishableCache.Get(token); inCache {
 				// If this token is already in our cache, we don't even check if it's in Redis,
 				// and just ask for a new one.
 				continue
@@ -118,7 +120,7 @@ func GetNewToken(c *gin.Context) {
 				// We calculate the expire time prior to actually setting it so the client
 				// can switch to another Nonce before it actually expires.
 				expires := time.Now().Add(NonceTTL)
-				perishableCache[token] = &PerishableInfo{0, expires}
+				perishableCache.Set(token, &PerishableInfo{0, expires}, NonceTTL)
 				setToken(PerishableRedisKey(token), NonceTTL, RedisCnx)
 				c.JSON(200, gin.H{"token": token, "expires": expires.Format(time.RFC3339), "limit": NonceLimit})
 				failed = false

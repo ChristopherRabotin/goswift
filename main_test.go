@@ -106,10 +106,10 @@ func TestSwift(t *testing.T) {
 			So(tok.Limit, ShouldEqual, NonceLimit)
 			expirationValid := tok.Expires.Sub(time.Now()) < NonceTTL
 			So(expirationValid, ShouldEqual, true)
-			_, tokenInCache := perishableCache[tok.Token]
+			_, tokenInCache := perishableCache.Get(tok.Token)
 			So(tokenInCache, ShouldEqual, true)
-			delete(perishableCache, tok.Token)
-			_, tokenInCache = perishableCache[tok.Token]
+			perishableCache.Delete(tok.Token)
+			_, tokenInCache = perishableCache.Get(tok.Token)
 			So(tokenInCache, ShouldEqual, false)
 
 			Convey("And can be used on the auth test endpoint for all methods until its limit", func() {
