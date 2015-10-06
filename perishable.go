@@ -98,7 +98,7 @@ func (p PerishableInfo) isValid() bool {
 	return p.Hits < NonceLimit && p.Expires.After(time.Now())
 }
 
-var perishableCache = cache.New(NonceTTL, 50*time.Millisecond)
+var perishableCache = cache.New(NonceTTL, time.Millisecond*50)
 
 // PerishableRedisKey returns the formatted Redis key for the provided perishable token.
 func PerishableRedisKey(token string) string {
